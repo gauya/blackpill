@@ -1,0 +1,28 @@
+.cnt 209
+...........cnt 210
+...........cnt 211
+...........cnt 212
+
+2024.02.18
+stm32f411ceu6( blackpill )
+stm32cubeide + stlink 에서 예전 라이브러리들 긁어와 1차 테스트했고
+아두이노 환경에선 쓸수 없는것들과 바꿔야할것들도 있어서  
+
+
+앞으로의 환경
+vscode, (dfu, stlink), arduino, (stm32cubemx)
+
+
+
+아두이노에서 기본으로 Serial을 잡고 있어서 uart관련된 함수를 내것으로 바꿀려면 까다로워진다.
+
+그래서 uart관련된 라이브러리를 지우고 (uartxxyy, gtty, fifo,.. ) 
+
+glog는 살리기는 하지만 마지막 출력부분은 Serial을 거치도록 함.
+
+또 gdebug(int lev, int where, )에서 where를 뺌( 무늬만 있고 안쓰던것 )
+
+gtick, gproc는 살려 동작이 된다는것만 확인했고 ... 클럭이 Sys Timer와 클럭이 다른것을 따져보지 않았다. 
+
+bluepill(72Mhz)에서 blackpill( 100Mhz)로 바뀌었고 두 모델의 레지스터가 다른지도 살펴보지 않았다. 
+
