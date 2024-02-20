@@ -1,6 +1,6 @@
-#include "gtty.h"
-#include "gstr.h"
-#include "glog.h"
+#include <gstr.h>
+#include <glog.h>
+#include <gtty.h>
 
 typedef enum { 
 	CMD_MODE_ECHO, 
@@ -40,7 +40,7 @@ int direct_escape_key = 0x3; // CTRL+C
 static uint8_t next_cmdfunc_no = 0;
 
 __attribute__((weak)) void help_tty_msg(void) {
-	gdebug(2,"ls -l\n... there is no help doc yet\n");
+	printf("ls -l\n... there is no help doc yet\n");
 }
 
 void tty_inner_cmd_list() {
@@ -271,7 +271,12 @@ void tty() {
 	if( c <= 0 ) {
 		return;
 	}
-	if( c=='\r') c = '\n';
+	if( c=='\r') {
+		c = '\n';
+	}
+	if( c== '\n')
+		gputc(c);
+
 	int ret = 0;
 
 	if( (ret = tty_prev_func(c)) != 0 ) {

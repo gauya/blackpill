@@ -31,6 +31,7 @@ extern "C" {
 #endif
 
 #include <stdint.h>
+#include <glog.h>
 
 #define TTY_LINE_BUF_SIZE 128
 #define MAX_TTY_CMD_FUNC 32
