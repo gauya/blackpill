@@ -18,24 +18,28 @@ void loop_led() {
 }
 
 void test1() {
-  //Serial.print(".");
   gdebug(3,".");
 }
 
 void test2() {
   static int c = 0;
-  gdebug(2,"test2 cnt=%d test(2)\n",c++);
+  uint32_t d,t = get_stime();
+  int h,m,s;
+  d = t;
+  s = d % 60; d /= 60;
+  m = d % 60; d /= 60;
+  h = d % 24; d /= 24;
+  gdebug(2,"test2 cnt = %d : elapsed %ld sec %d.%d.%d.%d]\n",c++, t,d, h,m,s);
 }
 
-stm32adc adc;
-void test3() {
-  int val[4];
+stm32adcdma adc;
 
-  for(int i=0;i<4;i++) {
-    val[i] = adc.read();
-  }
+void testadc() {
+  uint32_t val[4];
 
-  gdebug(2,"adc = %ld %ld %ld %ld\n", val[0], val[1], val[2], val[3]);
+  adc.read(val,4);
+
+  gdebug(2,"adc = (%d) %ld %ld %ld %ld\n", adc.finished(), val[0], val[1], val[2], val[3]);
 }
 
 void test4() {
@@ -47,13 +51,132 @@ void test4() {
 #include <gstr.h>
 extern void view_proc_all();
 
-void ls(const char *s) {
-  if(s && *s) {
-    int val = stol(s);
-    view_proc(val);
+void ps(const char *s) {
+  // ps 2
+  // ps (all)
+  // ps stop 2,4
+  // ps start 0
+  // ps frq 2.10   no 2 proc set frq = 10
+
+  const char*cmds[] = { "stop","start","frq",0 };
+  char buf[40],tb[10+1];
+  int c,no,val;
+  int dl=10;
+  strcpy(buf,s);
+
+  const char *p = get_token(buf,tb,10);
+  if( p ) {
+    c = instrs(tb,cmds);
+    if( c >= 0 ) {
+      p = get_token(p,tb,10);
+      gdebug(dl,"1. c=%d tb=[%s]\n", c, tb);
+      switch(c) {
+        case 0: // stop
+          if(tb[0]) {
+            val = stol(tb);
+            pfn_stop(val,1);
+      gdebug(dl,"2. val=%d tb=[%s]\n", val, tb);
+          } else { // error
+
+          }
+          break;
+        case 1: // start
+          if(tb[0]) {
+            val = stol(tb);
+            pfn_stop(val,0);
+      gdebug(dl,"3. val=%d tb=[%s]\n", val, tb);
+          } else { // error
+
+          }
+          break;
+        case 2: // frq
+          if(tb[0]) {
+            no = stol(tb);
+            p = get_token(p,tb,10);
+            if(p && tb[0]) {
+              val = stol(tb);
+              pfn_frq(no,val);
+      gdebug(dl,"4. val=%d tb=[%s]\n", val, tb);
+            } else {
+              // error
+      gdebug(dl,"4-1. val=%d tb=[%s]\n", val, tb);
+            }
+
+          }
+          break;
+        default:;
+      }
+      return;
+    } else { // numeric or error
+      // ps 2
+    }
   } else {
-    view_proc_all();
+    if(tb[0]) {
+      int pno = stol(tb);
+      gdebug(dl,"5. pno=%d tb=[%s]\n", pno, tb);
+
+      gpfn_t *g = get_proc_inf(pno);
+      gdebug(dl,"pid=%d frq=%d name=%s state [%d]",g->no, g->prot, g->pname, g->status);
+      return;
+    }
   }
+  
+  view_proc_all();
+}
+
+void strtest(const char*str, const char* ds, const char* ss) {
+  if(!ds) ds = __default_delimiter;
+  if(!ss) ss = __default_white_space;
+  int dl=10;
+
+  int token_cnt = 0;
+  int ssz = strlen(str);
+
+  char *buf = new char[ssz*2+1];
+  char **toks = new char*[ssz];
+
+  if( !buf || !toks ) {
+    gdebug(10,"!!!!!!!!! error [new] %d\n",ssz);
+    return;
+  }
+  char *tbp = buf;
+  const char *tp=str;
+
+  while(tp) {
+    tp = get_token(tp,tbp, ssz*2);
+    toks[token_cnt++] = tbp;
+    if(!*tbp || !tp) break;
+
+    gdebug(dl,"tc=%d tbp=[%s]\n", token_cnt,tbp);
+
+    while(*tbp) tbp++;
+    tbp++;
+
+  }
+
+  gdebug(dl,"msg = [%s]\n\ntotal tokens = %d\n", str, token_cnt);
+  for(int i=0; i < token_cnt; i++ ) {
+    gdebug(dl,"%2d : [%s]\n", i, toks[i]);
+  }
+  delete[] buf;
+  delete[] toks;
+}
+
+void strtestf(const char*str) {
+  strtest(str," .:",0);
+}
+
+void rtled() {
+  static int sw = 0, f=0;
+  f++;
+  if(!(f / 10)) {
+    digitalWrite(ledPin, sw);
+    sw = !sw;
+  }
+}
+
+void cli_test2(const char*s) {
+  test2();
 }
 
 void setup() {
@@ -67,23 +190,26 @@ void setup() {
   adc_channels ac[] = {
     { ADC_CHANNEL_2, ADC_SAMPLETIME_56CYCLES,GPIOA, 2,},
     { ADC_CHANNEL_9, ADC_SAMPLETIME_56CYCLES,GPIOB, 1, },
-    { ADC_CHANNEL_17, ADC_SAMPLETIME_480CYCLES,0, 0, },
-    { ADC_CHANNEL_18, ADC_SAMPLETIME_480CYCLES,0, 0, },
+  //  { ADC_CHANNEL_17, ADC_SAMPLETIME_480CYCLES,0, 0, },
+  //  { ADC_CHANNEL_18, ADC_SAMPLETIME_480CYCLES,0, 0, },
     0
   };
 
-  adc.setup(ADC1,4,ac);
+  adc.setup(ADC1,2,ac,0,0);
 
   init_ticks(eTICK_VOL_100us);
   init_pfn();
 
-  set_tty_func("ls",ls );
+  set_tty_func("ps",ps );
+  set_tty_func("time",cli_test2);
+  set_tty_func("str",strtestf);
 
-  add_pfn(1000, loop_led, "test");
+  add_pfn(1000, loop_led, "led blink");
   add_pfn(100,test1,"N1");
-  add_pfn(300,test2);
+  add_pfn(10*1000,test2);
+  add_pfn(5200, testadc,"adc read");
+  add_rtpfn(15,rtled);
   //add_pfn(10000,view_proc_all);
-  add_pfn(1200, test3,"adc read");
   add_pfn(0,tty,"key in");
 
   //timer.setPrescaleFactor(1);

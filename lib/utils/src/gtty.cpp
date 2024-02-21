@@ -274,8 +274,7 @@ void tty() {
 	if( c=='\r') {
 		c = '\n';
 	}
-	if( c== '\n')
-		gputc(c);
+	gputc(c);
 
 	int ret = 0;
 

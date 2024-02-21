@@ -19,6 +19,7 @@ extern "C" {
 
 // must be recreate get_mtime() and get_utime()
 // __weak attribute is applied
+uint32_t get_stime(void);
 uint32_t get_mtime(void);
 uint32_t get_utime(void);
 uint32_t get_utick(void);

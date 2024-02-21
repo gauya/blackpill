@@ -4,8 +4,31 @@
 extern "C" {
 #endif
 
-void ADC_IRQHandler(void);
-void DMA2_Stream0_IRQHandler(void);
+ADC_HandleTypeDef *hadcp = 0;
+DMA_HandleTypeDef *hdma_adcp = 0;
+
+void ADC_IRQHandler(void)
+{
+  /* USER CODE BEGIN ADC_IRQn 0 */
+  /* USER CODE END ADC_IRQn 0 */
+  if( hadcp )
+    HAL_ADC_IRQHandler(hadcp);
+  /* USER CODE BEGIN ADC_IRQn 1 */
+ 
+  /* USER CODE END ADC_IRQn 1 */
+}
+
+void DMA2_Stream0_IRQHandler(void)
+{
+  /* USER CODE BEGIN DMA2_Stream0_IRQn 0 */
+ 
+  /* USER CODE END DMA2_Stream0_IRQn 0 */
+  if( hdma_adcp ) 
+    HAL_DMA_IRQHandler(hdma_adcp);
+  /* USER CODE BEGIN DMA2_Stream0_IRQn 1 */
+ 
+  /* USER CODE END DMA2_Stream0_IRQn 1 */
+}
 
 void Error_Handler(void)
 {
@@ -21,7 +44,7 @@ void Error_Handler(void)
 void (*_stm32adc_callback)() = 0;
 
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {
-  if( _stm32adc_callback != 0 ) {
+  if( _stm32adc_callback  ) {
     _stm32adc_callback();
   }
 }
@@ -75,46 +98,34 @@ void stm32adc::setup(ADC_TypeDef *adc, int chs, struct adc_channels *ac) {
     Error_Handler();
   }
 
+  ADC_MultiModeTypeDef multimode = {0};
+  multimode.Mode = ADC_MODE_INDEPENDENT;
+  if (HAL_ADCEx_MultiModeConfigChannel(&_ha, &multimode) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
   _chs = ac;
 
   for(int i=0; i < _ha.Init.NbrOfConversion; i++) {
     add_channel(ac+i);
   }
 
-#if 0
-extern DMA_HandleTypeDef hdma_adc1;
-extern ADC_HandleTypeDef hadc1;
-
-  __HAL_RCC_DMA2_CLK_ENABLE();
-void DMA1_Channel1_IRQHandler(void)
-{
-  HAL_DMA_IRQHandler(AdcHandle.DMA_Handle);
-}
-
-  /* DMA interrupt init */
-  /* DMA2_Stream0_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA2_Stream0_IRQn, 0, 0);
-  HAL_NVIC_EnableIRQ(DMA2_Stream0_IRQn);
-
-  HAL_NVIC_SetPriority(ADC_IRQn, 0, 0);
-  HAL_NVIC_EnableIRQ(ADC_IRQn);
-  
-  HAL_ADC_Start_IT(&hadc1); // _ha.Init.ContinuousConvMode = ENABLE; disable,. ... once or every time
-  HAL_ADC_Start_DMA(&hadc1, (uint32_t *)ADC1Result, ADC1_NUM); // perform only once when _ha.Init.DMAContinuousRequests = ENABLE ;  when disable perform every time
-  HAL_ADC_ConvCpltCallBack(&hadc1);
-
-
-HAL_ADC_Start(&hadc1); // start the adc 
-
-HAL_ADC_PollForConversion(&hadc1, 100); // poll for conversion 
-adc_val = HAL_ADC_GetValue(&hadc1); // get the adc value 
-
-HAL_ADC_Stop(&hadc1); // stop adc 
-
-#endif
+  add_channel(ADC_CHANNEL_TEMPSENSOR); // ADC_CHANNEL_18
+  add_channel(ADC_CHANNEL_VREFINT); // ADC_CHANNEL_17
 
   _status = 0;
-  start(); // //HAL_ADC_Start(&_ha);
+}
+
+int stm32adc::add_channel(uint32_t ch) {
+  ADC_ChannelConfTypeDef sConfig = {0};
+  sConfig.Channel = ch;
+  sConfig.SamplingTime = ADC_SAMPLETIME_84CYCLES; 
+  sConfig.Rank = _channel_nr;
+
+  if (HAL_ADC_ConfigChannel(&_ha, &sConfig) != HAL_OK) {}
+
+  return  ++_channel_nr;
 }
 
 int stm32adc::add_channel(struct adc_channels *ac) {
@@ -190,6 +201,9 @@ int stm32adc::read() {
   return (int)(val & 0xfffl);
 }
 
+
+/// @brief ////////////////////////////////////////////////////////////////////////////////////////////////////
+
 stm32adcint::stm32adcint() 
 : stm32adc() {
 }
@@ -200,22 +214,27 @@ stm32adcint::stm32adcint(ADC_TypeDef *adc, int chs, struct adc_channels *ac, voi
 }
 
 stm32adcint::~stm32adcint() {
-  detach_intr();
+  detach_int();
 }
 
 void stm32adcint::setup(ADC_TypeDef *adc, int chs, struct adc_channels *ac, void (*intrf)()) {
   stm32adc::setup(adc, chs, ac);
-  attach_intr(intrf);
+  attach_int(intrf);
+  HAL_NVIC_SetPriority(ADC_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(ADC_IRQn);
+
 }
 
-void stm32adcint::attach_intr( void (*inf)()) {
-  _intrf = inf;
+void stm32adcint::attach_int( void (*inf)()) {
   _stm32adc_callback = inf;
+  hadcp = &_ha;
 }
 
+void stm32adcint::start() {
+  HAL_ADC_Start_IT(get_handle());
+}
 
-void stm32adcint::detach_intr() {
-  _intrf = (void(*)())0;
+void stm32adcint::detach_int() {
   _stm32adc_callback = (void(*)())0;
 }
 
@@ -228,24 +247,45 @@ stm32adcdma::stm32adcdma()
 : stm32adcint() {
 }
 
-stm32adcdma::stm32adcdma(ADC_TypeDef *adc, int chs, struct adc_channels *ac, void (*intrf)(), uint16_t *dmabuf) 
+stm32adcdma::stm32adcdma(ADC_TypeDef *adc, int chs, struct adc_channels *ac, void (*intrf)(), uint32_t *dmabuf) 
 : stm32adcint(adc, chs, ac, intrf) {
   _dmabuf = dmabuf;
 }
 
-void stm32adcdma::setup(ADC_TypeDef *adc, int chs, struct adc_channels *ac, void (*intrf)(), uint16_t *dmabuf) {
+void stm32adcdma::setup(ADC_TypeDef *adc, int chs, struct adc_channels *ac, void (*intrf)(), uint32_t *dmabuf) {
   stm32adcint::setup(adc, chs, ac, intrf);
 
+  if( !dmabuf ) {
+    _dmabuf = dmabuf = new uint32_t[channel_nr()];
+  }
+  hdma_adcp = 0;
+
+  __HAL_RCC_DMA2_CLK_ENABLE();
+  HAL_NVIC_SetPriority(DMA2_Stream0_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA2_Stream0_IRQn);
+
+  stm32adcint::start(); 
+  HAL_ADC_Start_DMA(get_handle(), dmabuf, channel_nr());
 }
 
 stm32adcdma::~stm32adcdma() {
+  if( _dmabuf ) delete[]_dmabuf;
+
+  HAL_ADC_Stop_IT(get_handle());
+  HAL_ADC_Stop(get_handle());
 }
 
-int stm32adcdma::read( uint16_t **bp) {
-  if(bp) {
-    (*bp) = _dmabuf;
-    return channel_nr();
-  } 
+uint32_t *stm32adcdma::read() {
+  return _dmabuf;
+}
+
+int stm32adcdma::read( uint32_t *bp,uint16_t size) {
+  if( _finished ) {
+    for(int i=0; i < size; i++ ) {
+      bp[i] = _dmabuf[i];
+    }
+    return size;
+  }
   return 0;
 }
 
@@ -287,6 +327,46 @@ int stm32adcdma::read( uint16_t **bp) {
 #define ADC_SAMPLETIME_112CYCLES  ((uint32_t)(ADC_SMPR1_SMP10_2 | ADC_SMPR1_SMP10_0))
 #define ADC_SAMPLETIME_144CYCLES  ((uint32_t)(ADC_SMPR1_SMP10_2 | ADC_SMPR1_SMP10_1))
 #define ADC_SAMPLETIME_480CYCLES  ((uint32_t)ADC_SMPR1_SMP10)
+
+  __HAL_RCC_DMA2_CLK_ENABLE();
+  HAL_NVIC_SetPriority(DMA2_Stream0_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA2_Stream0_IRQn);
+
+  HAL_NVIC_SetPriority(ADC_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(ADC_IRQn);
+  HAL_ADC_ConvCpltCallBack(&hadc1);
+
+#if 0
+extern DMA_HandleTypeDef hdma_adc1;
+extern ADC_HandleTypeDef hadc1;
+
+  __HAL_RCC_DMA2_CLK_ENABLE();
+void DMA1_Channel1_IRQHandler(void)
+{
+  HAL_DMA_IRQHandler(AdcHandle.DMA_Handle);
+}
+
+  /* DMA interrupt init */
+  /* DMA2_Stream0_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA2_Stream0_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA2_Stream0_IRQn);
+
+  HAL_NVIC_SetPriority(ADC_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(ADC_IRQn);
+  
+  HAL_ADC_Start_IT(&hadc1); // _ha.Init.ContinuousConvMode = ENABLE; disable,. ... once or every time
+  HAL_ADC_Start_DMA(&hadc1, (uint32_t *)ADC1Result, ADC1_NUM); // perform only once when _ha.Init.DMAContinuousRequests = ENABLE ;  when disable perform every time
+  HAL_ADC_ConvCpltCallBack(&hadc1);
+
+
+HAL_ADC_Start(&hadc1); // start the adc 
+
+HAL_ADC_PollForConversion(&hadc1, 100); // poll for conversion 
+adc_val = HAL_ADC_GetValue(&hadc1); // get the adc value 
+
+HAL_ADC_Stop(&hadc1); // stop adc 
+
+#endif
 
 void ADC_IRQHandler(void)
 {

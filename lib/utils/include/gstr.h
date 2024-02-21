@@ -75,6 +75,13 @@ typedef struct {
 	int step;
 } ptoken_t;
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+extern const char __default_white_space[];
+extern const char __default_delimiter[];
+
 void touppers(char *str) ;
 void tolowers(char *str) ;
 const char* whitespace_skip(const char *b);
@@ -96,7 +103,7 @@ block_type_t *get_block_type(int idx) ;
 
 block_type_t *is_start_block(const char *str) ;
 block_type_t *is_end_block(const char *str) ;
-block_type_t *get_block_type(const char *s) ;
+block_type_t *get_block_type(int) ;
 const char *gettoken(const char *s, char *buf,int dilimeter,const char *space) ;
 const char *get_token(const char *s, char *buf, size_t blen) ;
 block_info_t get_block(const char **str, char *buf, size_t bsize, int step) ;
@@ -108,6 +115,7 @@ int parse(const char *s,int step) ;
 /////////////////////////////////////////////////////////////////////////////////
 
 #ifdef __cplusplus
+}
 
 #include <stdexcept>
 using namespace std;
@@ -151,6 +159,14 @@ public:
 	gstr& replace_all(const char*, const char* to=0);
 	gstr& lower();
 	gstr& upper();
+};
+
+class gtoken : public gstr {
+public:
+public:
+	gtoken();
+	gtoken(const char *str);
+	virtual ~gtoken();
 };
 
 #endif // __cplusplus

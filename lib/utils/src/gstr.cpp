@@ -9,7 +9,7 @@
 #include <ctype.h>
 
 const char __default_white_space[] = " \t\n\r";
-const char __default_delimiter[] = " \t\n\r,.:/";
+const char __default_delimiter[] = ",.";
 
 void touppers(char *str) {
 	while(*str) {
@@ -434,8 +434,9 @@ block_type_t *get_block_type(const char *s) {
 }
 
 
-const char *gettoken(const char *s, char *buf,int dilimeter,const char *space) {
+const char *gettoken(const char *s, char *buf,int delimiter,const char *space) {
 	int cp = 0;
+	if( !space ) space = __default_white_space;
 
 	buf[cp] = '\0';
 	if(s) {
@@ -444,10 +445,10 @@ const char *gettoken(const char *s, char *buf,int dilimeter,const char *space) {
 			return (const char *)0;
 	}
 	while(*s) {
-		if(*s == dilimeter) {
+		if(*s == delimiter) {
 			if(strchri(space,*s) != -1) { // deli && space
 				s = str_skip(s,space);
-				if(*s == dilimeter)
+				if(*s == delimiter)
 					s++;
 			}
 			s++;

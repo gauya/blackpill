@@ -8,10 +8,7 @@
 #include <stdlib.h>
 #include <gproc.h>
 #include <glog.h>
-
-#ifdef __cplusplus
-extern "C" {
-#endif
+#include <app_etc.h>
 
 typedef struct {
 	gpfn_t *list[MAX_PFNS+1];
@@ -24,7 +21,9 @@ typedef struct {
 	grtpfn_t *list[MAX_RTPFNS+1];
 	int rtpfns;
 } rtpfnlist_t;
+
 static rtpfnlist_t __rtp;
+
 bool isinrtp() { return (__rtp.rtpfns > 0); }
 
 #endif
@@ -33,6 +32,10 @@ static pfnlist_t __stp;
 
 static uint16_t __restrict_time=0;
 //static double __busyrate=0.0;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 int init_pfn() {
 	for(int i=0;i<MAX_PFNS; i++) {
@@ -95,7 +98,7 @@ void run_rtproc(uint16_t i) {
 
 	grtpfn_t *r = __rtp.list[i];
 
-	if( r && is_timed(&(r->tmd))) {
+	if( r && is_timed(&(r->tmd)) ) {
 		r->rtpfn();
 	}
 }
@@ -110,7 +113,7 @@ void run_rtproc_all() {
 
 #endif
 
-int pfn_setstopflag(int no, int stop) { // stop==1 then set stop, or reset
+int pfn_stop(int no, int stop) { // stop==1 then set stop, or reset
 	gpfn_t *g = get_pfn(no);
 	if( !g ) return -1;
 
@@ -123,7 +126,11 @@ int pfn_setstopflag(int no, int stop) { // stop==1 then set stop, or reset
 	return 0;
 }
 
-int pfn_settimer(int no, int ms) {
+int pfn_start(int no) {
+	return pfn_stop(no , 0);
+}
+
+int pfn_frq(int no, int ms) {
 	gpfn_t *g = get_pfn(no);
 	if( !g ) return -1;
 
@@ -155,7 +162,7 @@ void view_proc_all() {
 	for(i=0; i<MAX_PFNS; i++) {
 		g = __stp.list[i];
 		if( !g ) continue;
-		gdebug(2,"%2d %7d '%s' %d %lu %s\n",g->no, g->prot, g->pname, g->status, g->load
+		gdebug(2,"%2d %7d '%-12s' %d %8x %s\n",g->no, g->prot, g->pname, g->status, g->load
 				, (g->status == 0)? "Standby"
 						: (g->status == 1)? "Running"
 								: (g->status == 2)?  "Stoped"
@@ -163,10 +170,10 @@ void view_proc_all() {
 												: "Unknown");
 	}
 #if ( __RT_PROC__ != 0)
-	for(i=0; i<MAX_RTPFNS; i++) {
+	for( i=0; i < MAX_RTPFNS; i++ ) {
 		r = __rtp.list[i];
 		if( !r ) continue;
-		gdebug(0,"%2d * %7dms rt proc\n", i,r->tmd.check);
+		gdebug(2,"%2d * %7dms rt proc\n", i,r->tmd.check);
 	}
 #endif
 
@@ -184,7 +191,7 @@ gpfn_t *get_proc_inf(int no) {
 void view_proc(int no) {
 	gpfn_t *g = get_proc_inf(no);
 	if(g)
-		gdebug(2,"%2d %7d '%s' %d %lu %s\n",g->no, g->prot, g->pname, g->status, g->load);
+		gdebug(2,"%2d %7d '%-12s' %d %8x\n",g->no, g->prot, g->pname, g->status, g->load);
 }
 
 static void proc(gpfn_t *g) {
@@ -209,12 +216,13 @@ static int run() {
 	// run_rtproc_all();
 	
 	uint32_t stime = get_utime();
-	for(i=0; i<__stp.pfns; i++) {
+
+	for( i=0; i < __stp.pfns; i++ ) {
 		if( is_pfn(i) == false ) continue;
 		g = __stp.list[i];
 
  		if( g->prot <= 0 || (g->status & 0x3) ) continue; 
- 		if(  is_timed(&(g->tmd)) ) {
+ 		if(  is_timed( &(g->tmd )) ) {
  			proc(g);
 
 			if( restrict_flag == 0) {
@@ -228,7 +236,7 @@ static int run() {
 	if( restrict_flag ) return runs;
 
 	// time left and not impotant jobs
-	for(i=0; i<__stp.pfns; i++) {
+	for( i=0; i<__stp.pfns; i++ ) {
 		if( elapsed_us(stime) > __restrict_time ) {
 			return runs;
 		}
@@ -252,21 +260,22 @@ gpfn_t *get_pfn( int id ) {
 	return __stp.list[id];
 }
 
-
 static int __runs = 0;
-static uint32_t __srun, __erun;
+static uint32_t __srun, __erun, __dur;
 
 __attribute__((weak)) void scadule_pre() {
-	__srun = get_utime();
 	return;
 }
 
 static void __scadule_post() {
+}
+
+__attribute__((weak)) void scadule_post() {
 	__erun = get_utime();
 
 	uint32_t e = dif_u32(__srun,__erun);
 	if( e > __restrict_time) {
-		gdebug(5,"elapsed %lu - %lu/%lu\n", e, __srun,__erun);
+		gdebug(10,"elapsed %lu - %lu/%lu\n", e, __srun,__erun);
 	}
 	if( __runs < __stp.pfns ) {
 		// readjustment, large load pfn
@@ -278,19 +287,23 @@ static void __scadule_post() {
 	return;
 }
 
-__attribute__((weak)) void scadule_post() {
-}
 
 void scadule() {
-	__restrict_time = LOOP_RESTRICT_TIME;
+	__restrict_time = LOOP_RESTRICT_TIME; // ~= 20msec
+
+	init_iwdg();
 
 	while(1) {
+		__srun = get_utime();
 		scadule_pre();
 
 		__runs = run();
 
-		__scadule_post();
+		__erun = get_utime();
+		__dur = dif_u32(__srun,__erun);
 		scadule_post();
+
+		clear_iwdg();
 	}
 }
 

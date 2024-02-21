@@ -11,6 +11,10 @@
 extern "C" {
 #endif
 
+__attribute ((__weak__)) uint32_t get_stime() {
+	return 0;
+}
+
 __attribute ((__weak__)) uint32_t get_mtime() {
 //	 return HAL_GetTick();
 	return 0;
@@ -30,13 +34,9 @@ __attribute ((__weak__)) uint32_t get_tick() {
 	return 0;
 }
 
-uint32_t get_stime() {
-	return (get_mtime() / 1000);
-}
-
 int is_timed(timed_t *t) {
 	if(t->check != 0 && elapsed_ms(t->m) >= t->check) {
-		t->m = get_mtime();
+		t->m = get_mtime(); 
 		return 1;
 	}
 	return 0;
