@@ -159,22 +159,28 @@ void view_proc_all() {
 	int i;
 	gpfn_t *g;
 	grtpfn_t *r;
+	int n_no=0, r_no=0, stoped=0;
+
 	for(i=0; i<MAX_PFNS; i++) {
 		g = __stp.list[i];
 		if( !g ) continue;
-		gdebug(2,"%2d %7d '%-12s' %d %8x %s\n",g->no, g->prot, g->pname, g->status, g->load
+		gdebug(2,"%2d %7d '%-12s' %d %7d %s\n",g->no, g->prot, g->pname, g->status, g->load
 				, (g->status == 0)? "Standby"
 						: (g->status == 1)? "Running"
 								: (g->status == 2)?  "Stoped"
 										: (g->status == -1)? "Deleted"
 												: "Unknown");
+		if(g->status == 2) stoped++;
+		n_no++;
 	}
 #if ( __RT_PROC__ != 0)
 	for( i=0; i < MAX_RTPFNS; i++ ) {
 		r = __rtp.list[i];
 		if( !r ) continue;
-		gdebug(2,"%2d * %7dms rt proc\n", i,r->tmd.check);
+		gdebug(2,"%2d * %5dms [ rt proc ]\n", i,r->tmd.check);
+		r_no++;
 	}
+	gdebug(2,"total process %d , n(%d),r(%d), stoped=%d current mtime = %d\n\n", (r_no+n_no), n_no,r_no,stoped,get_mtime());
 #endif
 
 }
@@ -191,7 +197,12 @@ gpfn_t *get_proc_inf(int no) {
 void view_proc(int no) {
 	gpfn_t *g = get_proc_inf(no);
 	if(g)
-		gdebug(2,"%2d %7d '%-12s' %d %8x\n",g->no, g->prot, g->pname, g->status, g->load);
+		gdebug(2,"%2d %7d '%-12s' %8d %8d %8d %d(%s)\n",g->no, g->prot, g->pname, g->load,
+		g->tmd.m, elapsed_ms(g->tmd.m), g->status, (g->status == 0)? "Standby"
+						: (g->status == 1)? "Running"
+								: (g->status == 2)?  "Stoped"
+										: (g->status == -1)? "Deleted"
+												: "Unknown");
 }
 
 static void proc(gpfn_t *g) {

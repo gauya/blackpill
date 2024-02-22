@@ -6,6 +6,7 @@
 #include <gadc.h>
 #include <gtty.h>
 #include <stdio.h>
+#include "app_etc.h"
 
 const int ledPin = PC13;
 void loop_led() {
@@ -33,19 +34,37 @@ void test2() {
 }
 
 stm32adcdma adc;
+int dma_completed;
+extern int aflag[3] ;
+
+void adc_cb() {
+  dma_completed = 1;
+}
 
 void testadc() {
-  uint32_t val[4];
+  uint16_t val[8] = { 0,0,0,0,0,0,0,0 };
 
-  adc.read(val,4);
-
-  gdebug(2,"adc = (%d) %ld %ld %ld %ld\n", adc.finished(), val[0], val[1], val[2], val[3]);
+  if(dma_completed == 1) {
+    adc.read(val,4);
+    dma_completed = 0;
+    gdebug(2,"adc = %ld %ld %ld %ld %ld %ld %ld %ld\n",  val[0], val[1], val[2], val[3], val[4], val[5], val[6], val[7]);
+  } else {
+    gdebug(2,"adc not completed\n");
+  }
 }
 
 void test4() {
   int val = Serial.read();
   if( val == -1 ) return;
   Serial.write(val); // echo
+}
+
+void test5(const char*s) {
+  view_proc(2);
+}
+
+void test6() {
+  gdebug(2,"-------------------\n");
 }
 
 #include <gstr.h>
@@ -112,11 +131,7 @@ void ps(const char *s) {
     }
   } else {
     if(tb[0]) {
-      int pno = stol(tb);
-      gdebug(dl,"5. pno=%d tb=[%s]\n", pno, tb);
-
-      gpfn_t *g = get_proc_inf(pno);
-      gdebug(dl,"pid=%d frq=%d name=%s state [%d]",g->no, g->prot, g->pname, g->status);
+      view_proc(stol(tb));
       return;
     }
   }
@@ -196,9 +211,12 @@ void setup() {
   };
 
   adc.setup(ADC1,2,ac,0,0);
+  adc.attach(adc_cb);
+  adc.start();
 
   init_ticks(eTICK_VOL_100us);
   init_pfn();
+
 
   set_tty_func("ps",ps );
   set_tty_func("time",cli_test2);
@@ -211,7 +229,9 @@ void setup() {
   add_rtpfn(15,rtled);
   //add_pfn(10000,view_proc_all);
   add_pfn(0,tty,"key in");
-
+  add_pfn(10000, test6, "elapsed test");
+  add_proc("check pr", test5, 2, 0);
+  
   //timer.setPrescaleFactor(1);
   //timer.setCaptureCompare(1);
   //timer.attachInterrupt(timer_func);

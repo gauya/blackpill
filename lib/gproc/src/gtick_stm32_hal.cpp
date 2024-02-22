@@ -49,7 +49,7 @@ void HAL_IncTick(void) {
 	__uTicks += __usec_per_tick;
 	if(++cnt >= __tick_vol) {
 		__mTicks++;
-		cnt = 0; mcnt++;
+		cnt = 0;
 		if(++mcnt > 1000) {
 			__STicks++;
 			mcnt = 0;

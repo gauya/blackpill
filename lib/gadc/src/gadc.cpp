@@ -5,45 +5,31 @@ extern "C" {
 #endif
 
 ADC_HandleTypeDef *hadcp = 0;
-DMA_HandleTypeDef *hdma_adcp = 0;
+DMA_HandleTypeDef *hdma_adcp; // = &hdma_adc1;
 
-void ADC_IRQHandler(void)
-{
-  /* USER CODE BEGIN ADC_IRQn 0 */
-  /* USER CODE END ADC_IRQn 0 */
+void ADC_IRQHandler(void) {
   if( hadcp )
     HAL_ADC_IRQHandler(hadcp);
-  /* USER CODE BEGIN ADC_IRQn 1 */
- 
-  /* USER CODE END ADC_IRQn 1 */
 }
 
-void DMA2_Stream0_IRQHandler(void)
-{
-  /* USER CODE BEGIN DMA2_Stream0_IRQn 0 */
- 
-  /* USER CODE END DMA2_Stream0_IRQn 0 */
-  if( hdma_adcp ) 
+
+void DMA2_Stream0_IRQHandler(void) {
+  if( hdma_adcp ) {
     HAL_DMA_IRQHandler(hdma_adcp);
-  /* USER CODE BEGIN DMA2_Stream0_IRQn 1 */
- 
-  /* USER CODE END DMA2_Stream0_IRQn 1 */
+  }
 }
 
-void Error_Handler(void)
-{
-  /* USER CODE BEGIN Error_Handler_Debug */
-  /* User can add his own implementation to report the HAL error return state */
+void Error_Handler(void) {
   __disable_irq();
-  while (1)
-  {
-  }
-  /* USER CODE END Error_Handler_Debug */
+  while (1)  { }
 }
 
 void (*_stm32adc_callback)() = 0;
 
+int adc_completed = 0;
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {
+  adc_completed = 1;
+
   if( _stm32adc_callback  ) {
     _stm32adc_callback();
   }
@@ -62,6 +48,8 @@ stm32adc::stm32adc() {
 }
 
 stm32adc::stm32adc(ADC_TypeDef *adc, int chs, struct adc_channels *ac) {
+  _mode = eADC_POLLING;
+
   setup(adc, chs, ac);
 }
 
@@ -72,8 +60,7 @@ void stm32adc::setup(ADC_TypeDef *adc, int chs, struct adc_channels *ac) {
   _channel_nr = 0;
   _timeout = 1; // ms
   _status = 0;
-  _mode = 0;
-
+ 
   _ha.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV2;
   _ha.Init.Resolution = ADC_RESOLUTION_12B;
   _ha.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
@@ -86,21 +73,13 @@ void stm32adc::setup(ADC_TypeDef *adc, int chs, struct adc_channels *ac) {
   _ha.Init.ContinuousConvMode = ENABLE;
 
 // multi, continues, use dma
-  if( _mode != eADC_DMA && _mode != eADC_DMAINTERRUPT ) {
-    _ha.Init.DMAContinuousRequests = DISABLE;
-  } else {
-    __HAL_RCC_DMA2_CLK_ENABLE();
+  if( _mode == eADC_DMA || _mode == eADC_DMAINTERRUPT ) {
     _ha.Init.DMAContinuousRequests = ENABLE;
+  } else {
+    _ha.Init.DMAContinuousRequests = DISABLE;
   }
 
-  if (HAL_ADC_Init(&_ha) != HAL_OK)
-  {
-    Error_Handler();
-  }
-
-  ADC_MultiModeTypeDef multimode = {0};
-  multimode.Mode = ADC_MODE_INDEPENDENT;
-  if (HAL_ADCEx_MultiModeConfigChannel(&_ha, &multimode) != HAL_OK)
+  if (HAL_ADC_Init(&_ha) != HAL_OK) // --> call HAL_ADC_MspInit()
   {
     Error_Handler();
   }
@@ -117,6 +96,7 @@ void stm32adc::setup(ADC_TypeDef *adc, int chs, struct adc_channels *ac) {
   _status = 0;
 }
 
+// 
 int stm32adc::add_channel(uint32_t ch) {
   ADC_ChannelConfTypeDef sConfig = {0};
   sConfig.Channel = ch;
@@ -125,7 +105,7 @@ int stm32adc::add_channel(uint32_t ch) {
 
   if (HAL_ADC_ConfigChannel(&_ha, &sConfig) != HAL_OK) {}
 
-  return  ++_channel_nr;
+  return  ++_channel_nr; // rank is auto increase sequentially
 }
 
 int stm32adc::add_channel(struct adc_channels *ac) {
@@ -138,7 +118,7 @@ int stm32adc::add_channel(struct adc_channels *ac) {
   
   if (HAL_ADC_ConfigChannel(&_ha, &sConfig) != HAL_OK) {}
 
-  if( ac->port != 0 ) { // Vrefint, temperture, ..
+  if( ac->port != 0 ) { // not Vrefint, temperture, ..
     if( IS_GPIO_ALL_INSTANCE(ac->port)) {
       if( IS_GPIO_ALL_INSTANCE(GPIOA) && (ac->port == GPIOA) ) { __HAL_RCC_GPIOA_CLK_ENABLE(); }
       else if( IS_GPIO_ALL_INSTANCE(GPIOB) && (ac->port == GPIOB )) { __HAL_RCC_GPIOB_CLK_ENABLE(); }
@@ -157,6 +137,7 @@ int stm32adc::add_channel(struct adc_channels *ac) {
     HAL_GPIO_Init(ac->port, &GPIO_InitStruct);
   }
 
+  hadcp = &_ha;
   return ++_channel_nr;
 }
 
@@ -206,26 +187,29 @@ int stm32adc::read() {
 
 stm32adcint::stm32adcint() 
 : stm32adc() {
+  _mode = eADC_INTERRUPT;
+  HAL_NVIC_SetPriority(ADC_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(ADC_IRQn);
 }
 
 stm32adcint::stm32adcint(ADC_TypeDef *adc, int chs, struct adc_channels *ac, void (*intrf)()) 
 : stm32adc(adc, chs, ac) {
-
+  _mode = eADC_INTERRUPT;
+  HAL_NVIC_SetPriority(ADC_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(ADC_IRQn);
 }
 
 stm32adcint::~stm32adcint() {
-  detach_int();
+  detach();
 }
 
 void stm32adcint::setup(ADC_TypeDef *adc, int chs, struct adc_channels *ac, void (*intrf)()) {
   stm32adc::setup(adc, chs, ac);
-  attach_int(intrf);
-  HAL_NVIC_SetPriority(ADC_IRQn, 0, 0);
-  HAL_NVIC_EnableIRQ(ADC_IRQn);
+  attach(intrf);
 
 }
 
-void stm32adcint::attach_int( void (*inf)()) {
+void stm32adcint::attach( void (*inf)()) {
   _stm32adc_callback = inf;
   hadcp = &_ha;
 }
@@ -234,7 +218,7 @@ void stm32adcint::start() {
   HAL_ADC_Start_IT(get_handle());
 }
 
-void stm32adcint::detach_int() {
+void stm32adcint::detach() {
   _stm32adc_callback = (void(*)())0;
 }
 
@@ -245,27 +229,53 @@ int stm32adcint::read() {
 
 stm32adcdma::stm32adcdma() 
 : stm32adcint() {
+  _mode = eADC_DMAINTERRUPT;
 }
 
-stm32adcdma::stm32adcdma(ADC_TypeDef *adc, int chs, struct adc_channels *ac, void (*intrf)(), uint32_t *dmabuf) 
+stm32adcdma::stm32adcdma(ADC_TypeDef *adc, int chs, struct adc_channels *ac, void (*intrf)(), uint16_t *dmabuf) 
 : stm32adcint(adc, chs, ac, intrf) {
+  _mode = eADC_DMAINTERRUPT;
   _dmabuf = dmabuf;
 }
 
-void stm32adcdma::setup(ADC_TypeDef *adc, int chs, struct adc_channels *ac, void (*intrf)(), uint32_t *dmabuf) {
-  stm32adcint::setup(adc, chs, ac, intrf);
+ DMA_HandleTypeDef hdma_adc1;
+void stm32adcdma::setup(ADC_TypeDef *adc, int chs, struct adc_channels *ac, void (*intrf)(), uint16_t *dmabuf) {
 
   if( !dmabuf ) {
-    _dmabuf = dmabuf = new uint32_t[channel_nr()];
+    _dmabuf = dmabuf = new uint16_t[channel_nr()*2];
   }
   hdma_adcp = 0;
-
+  
+  #if 1
   __HAL_RCC_DMA2_CLK_ENABLE();
   HAL_NVIC_SetPriority(DMA2_Stream0_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(DMA2_Stream0_IRQn);
 
-  stm32adcint::start(); 
-  HAL_ADC_Start_DMA(get_handle(), dmabuf, channel_nr());
+
+  hdma_adc1.Instance = DMA2_Stream0;
+  hdma_adc1.Init.Channel = DMA_CHANNEL_0;
+  hdma_adc1.Init.Direction = DMA_PERIPH_TO_MEMORY;
+  hdma_adc1.Init.PeriphInc = DMA_PINC_DISABLE;
+  hdma_adc1.Init.MemInc = DMA_MINC_ENABLE;
+  hdma_adc1.Init.PeriphDataAlignment = DMA_PDATAALIGN_HALFWORD;
+  hdma_adc1.Init.MemDataAlignment = DMA_MDATAALIGN_HALFWORD;
+  hdma_adc1.Init.Mode = DMA_CIRCULAR;
+  hdma_adc1.Init.Priority = DMA_PRIORITY_MEDIUM; //DMA_PRIORITY_LOW;
+  hdma_adc1.Init.FIFOMode = DMA_FIFOMODE_DISABLE;
+  if (HAL_DMA_Init(&hdma_adc1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  hdma_adcp = &hdma_adc1;
+#endif
+
+  stm32adcint::setup(adc, chs, ac, intrf);
+  //HAL_ADC_PollForConversion(get_handle(),100);
+
+  __HAL_LINKDMA((&_ha),DMA_Handle,hdma_adc1);
+
+  //adc_rr(get_handle());
 }
 
 stm32adcdma::~stm32adcdma() {
@@ -275,12 +285,17 @@ stm32adcdma::~stm32adcdma() {
   HAL_ADC_Stop(get_handle());
 }
 
-uint32_t *stm32adcdma::read() {
+void stm32adcdma::start() {
+  stm32adcint::start(); 
+  HAL_ADC_Start_DMA(get_handle(), (uint32_t*)_dmabuf, channel_nr());
+}
+
+uint16_t *stm32adcdma::read() {
   return _dmabuf;
 }
 
-int stm32adcdma::read( uint32_t *bp,uint16_t size) {
-  if( _finished ) {
+int stm32adcdma::read( uint16_t *bp,uint16_t size) {
+  if( adc_completed ) {
     for(int i=0; i < size; i++ ) {
       bp[i] = _dmabuf[i];
     }

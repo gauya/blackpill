@@ -8,8 +8,8 @@
       "args": [],
       "stopAtEntry": false,
       "externalConsole": true,
-      "cwd": "d:/vs/projects/stm32/blackpill_f411ce",
-      "program": "d:/vs/projects/stm32/blackpill_f411ce/build/Debug/outDebug",
+      "cwd": "d:/vs/projects/stm32/blackpill_f411ce/src",
+      "program": "d:/vs/projects/stm32/blackpill_f411ce/src/build/Debug/outDebug",
       "MIMode": "gdb",
       "miDebuggerPath": "C:/Users/seu/.platformio/packages/toolchain-gdbarmnoneeabi/bin/arm-none-eabi-gcc.exe",
       "setupCommands": [

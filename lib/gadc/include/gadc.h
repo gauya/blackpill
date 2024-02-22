@@ -68,6 +68,7 @@ public:
   virtual ~stm32adc(){};
   
   void setup(ADC_TypeDef *adc, int chs, struct adc_channels *ac);
+  void setup();
 
   void start(int timeout=-1);
   void stop();
@@ -82,17 +83,16 @@ public:
 
 class stm32adcint : public stm32adc {
 protected:
-  int _finished; // 0 or 1(readable)
 public:
 public:
     stm32adcint();
     stm32adcint(ADC_TypeDef *adc, int chs, struct adc_channels *ac, void (*intrf)());
     ~stm32adcint();
     void setup(ADC_TypeDef *adc, int chs, struct adc_channels *ac, void (*intrf)());
+    void setup();
 
-    void attach_int( void (*intrf)() );
-    void detach_int();
-    bool finished() { return (_finished); }
+    void attach( void (*intrf)() );
+    void detach();
     void start();
 
     int read();
@@ -100,18 +100,20 @@ public:
 
 class stm32adcdma : public stm32adcint {
 protected:
-    uint32_t *_dmabuf;
-    uint32_t *get_buffer() { return _dmabuf;};
+    uint16_t *_dmabuf;
+    uint16_t *get_buffer() { return _dmabuf;};
 public:
 public:
     stm32adcdma();
-    stm32adcdma(ADC_TypeDef *adc, int chs, struct adc_channels *ac, void (*intrf)(), uint32_t *dmabuf);
+    stm32adcdma(ADC_TypeDef *adc, int chs, struct adc_channels *ac, void (*intrf)(), uint16_t *dmabuf);
     ~stm32adcdma();
     
-    void setup(ADC_TypeDef *adc, int chs, struct adc_channels *ac, void (*intrf)(), uint32_t *dmabuf);
+    void setup(ADC_TypeDef *adc, int chs, struct adc_channels *ac, void (*intrf)(), uint16_t *dmabuf);
+    void setup();
+    void start();
 
-    int read(uint32_t *bp, uint16_t bsize);
-    uint32_t *read();
+    int read(uint16_t *bp, uint16_t bsize);
+    uint16_t *read();
 
 };
 
