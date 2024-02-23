@@ -39,7 +39,7 @@ typedef struct {
 } gpfn_t;
 
 int init_pfn();
-int add_pfn(int prot, void (*pfn)(), const char*pname=0); // prot 0: any time any more
+int add_pfn(int prot, void (*pfn)(), const char*pname=0,int act=1); // prot 0: any time any more
 
 #if (__RT_PROC__ != 0 )
 

@@ -33,12 +33,76 @@ typedef struct {
 	double	min; //
 } pg_t;
 
+typedef struct {
+	uint32_t cb,n;
+	double  v;
+} gavg_t;
+
+
 double topg( pg_t *p, double v );
+int toph( pg_t *p, double v );
+
 uint32_t dif_u32(uint32_t s,uint32_t e);
 uint32_t dif_u32_limit(uint32_t s,uint32_t e,uint32_t max);
 
+double gavg(gavg_t *k, double nv );
+void set_gavg(gavg_t *k, uint8_t no);
+double last_gavg(gavg_t *a);
+
 #ifdef __cplusplus
 }
+#define DEF_GAVG_CALIBRATION 10
+
+class gavg : gavg_t {
+public:
+	gavg(int cs = DEF_GAVG_CALIBRATION);
+	virtual ~gavg();
+
+	inline double get() const { return v; }
+	double put( double val );
+	void set(uint32_t nb);
+	double operator=(double val) { return put(val); }
+	inline operator double() const { return get(); }
+};
+
+template <typename T,typename N>
+struct gavg_tt{
+	N cb,n;
+	T v; 
+};
+typedef gavg_tt<double,uint32_t> gavgdu_t;
+
+template<typename T, typename N>
+class gtg : public gavg_tt<T,N> {
+	//gavg_tt<T,N> _d;
+protected:
+	using gavg_tt<T,N>::v;
+	using gavg_tt<T,N>::cb;
+	using gavg_tt<T,N>::n;
+public:
+	gtg(N cs = DEF_GAVG_CALIBRATION);
+	virtual ~gtg();
+
+	inline T get() const { return this->v; }
+	T put( T val );
+	void set(N nb);
+	T operator=(T val) { return put(val); }
+	inline operator T() const { return get(); }
+};
+// gavg_tt<int,uint8_t> gr;
+
+class gam {
+private:
+	gavg_t *_gs = 0;
+	int _len = 0;
+public:
+	gam(int no, int cs[]);
+	virtual ~gam();
+
+	double get(int id = 0);
+	double put( double v );
+	double set(int id,uint32_t n);
+};
 
 #else // c
 
@@ -50,6 +114,5 @@ typedef enum {
 #endif
 
 #endif // cplusplus
-
 
 #endif /* GUTILS_H_ */

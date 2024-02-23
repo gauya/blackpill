@@ -28,7 +28,7 @@ void (*_stm32adc_callback)() = 0;
 
 int adc_completed = 0;
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {
-  adc_completed = 1;
+  adc_completed++;
 
   if( _stm32adc_callback  ) {
     _stm32adc_callback();
@@ -42,7 +42,7 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {
 stm32adc::stm32adc() {
   _ha.Instance = 0;
   _channel_nr = 0;
-  _timeout = 10; // ms
+  _timeout = 1; // ms
   _status = eADC_NOTSETUP; // -1
   _mode = eADC_POLLING; // 0       (_mode & 0x7)
 }
@@ -90,22 +90,23 @@ void stm32adc::setup(ADC_TypeDef *adc, int chs, struct adc_channels *ac) {
     add_channel(ac+i);
   }
 
-  add_channel(ADC_CHANNEL_TEMPSENSOR); // ADC_CHANNEL_18
-  add_channel(ADC_CHANNEL_VREFINT); // ADC_CHANNEL_17
+  add_channel(ADC_CHANNEL_VREFINT,ADC_SAMPLETIME_480CYCLES); // ADC_CHANNEL_17
+  add_channel(ADC_CHANNEL_TEMPSENSOR,ADC_SAMPLETIME_480CYCLES); // ADC_CHANNEL_18
+
+  //HAL_ADC_TempSensorVrefintCmd(ENABLE);
 
   _status = 0;
 }
 
-// 
-int stm32adc::add_channel(uint32_t ch) {
+int stm32adc::add_channel(uint32_t ch,uint32_t samplerate) {
   ADC_ChannelConfTypeDef sConfig = {0};
   sConfig.Channel = ch;
-  sConfig.SamplingTime = ADC_SAMPLETIME_84CYCLES; 
-  sConfig.Rank = _channel_nr;
+  sConfig.SamplingTime = samplerate; // default ADC_SAMPLETIME_84CYCLES; 
+  sConfig.Rank = ++_channel_nr; // 1 ~ ,  
 
   if (HAL_ADC_ConfigChannel(&_ha, &sConfig) != HAL_OK) {}
 
-  return  ++_channel_nr; // rank is auto increase sequentially
+  return  _channel_nr; // rank is auto increase sequentially
 }
 
 int stm32adc::add_channel(struct adc_channels *ac) {
@@ -218,11 +219,19 @@ void stm32adcint::start() {
   HAL_ADC_Start_IT(get_handle());
 }
 
+void stm32adcint::stop() {
+  if( ! isready() ) return;
+
+  HAL_ADC_Stop_IT(get_handle());
+}
+
 void stm32adcint::detach() {
   _stm32adc_callback = (void(*)())0;
 }
 
 int stm32adcint::read() {
+  if( ! isready() ) return -1;
+
   int val = stm32adc::read();
   return val;
 }
@@ -240,17 +249,14 @@ stm32adcdma::stm32adcdma(ADC_TypeDef *adc, int chs, struct adc_channels *ac, voi
 
  DMA_HandleTypeDef hdma_adc1;
 void stm32adcdma::setup(ADC_TypeDef *adc, int chs, struct adc_channels *ac, void (*intrf)(), uint16_t *dmabuf) {
-
   if( !dmabuf ) {
-    _dmabuf = dmabuf = new uint16_t[channel_nr()*2];
+    _dmabuf = dmabuf = new uint16_t[channel_nr()*8];
   }
   hdma_adcp = 0;
   
-  #if 1
   __HAL_RCC_DMA2_CLK_ENABLE();
   HAL_NVIC_SetPriority(DMA2_Stream0_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(DMA2_Stream0_IRQn);
-
 
   hdma_adc1.Instance = DMA2_Stream0;
   hdma_adc1.Init.Channel = DMA_CHANNEL_0;
@@ -268,14 +274,10 @@ void stm32adcdma::setup(ADC_TypeDef *adc, int chs, struct adc_channels *ac, void
   }
 
   hdma_adcp = &hdma_adc1;
-#endif
 
   stm32adcint::setup(adc, chs, ac, intrf);
-  //HAL_ADC_PollForConversion(get_handle(),100);
 
   __HAL_LINKDMA((&_ha),DMA_Handle,hdma_adc1);
-
-  //adc_rr(get_handle());
 }
 
 stm32adcdma::~stm32adcdma() {
@@ -286,9 +288,20 @@ stm32adcdma::~stm32adcdma() {
 }
 
 void stm32adcdma::start() {
+  if( ! isready() ) return;
+
   stm32adcint::start(); 
   HAL_ADC_Start_DMA(get_handle(), (uint32_t*)_dmabuf, channel_nr());
 }
+
+void stm32adcdma::stop() {
+  if( ! isready() ) return;
+
+  stm32adcint::stop(); 
+  HAL_ADC_Stop_IT(get_handle());
+  HAL_ADC_Stop_DMA(get_handle());
+}
+
 
 uint16_t *stm32adcdma::read() {
   return _dmabuf;

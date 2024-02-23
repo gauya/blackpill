@@ -56,7 +56,7 @@ protected:
   uint16_t _timeout;
   
   int add_channel(adc_channels *ac); // return channels;
-  int add_channel(uint32_t ch); // Vref, temp, 
+  int add_channel(uint32_t ch, uint32_t samplerate=ADC_SAMPLETIME_84CYCLES); // Vref, temp, 
   void conv();
   //inline ADC_HandleTypeDef *get_handle() { return &_ha; }
 public:
@@ -93,7 +93,9 @@ public:
 
     void attach( void (*intrf)() );
     void detach();
+
     void start();
+    void stop();
 
     int read();
 };
@@ -110,7 +112,9 @@ public:
     
     void setup(ADC_TypeDef *adc, int chs, struct adc_channels *ac, void (*intrf)(), uint16_t *dmabuf);
     void setup();
+
     void start();
+    void stop();
 
     int read(uint16_t *bp, uint16_t bsize);
     uint16_t *read();

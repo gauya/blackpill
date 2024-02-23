@@ -53,14 +53,14 @@ int init_pfn() {
 	return 0;
 }
 
-int add_pfn(int prot, void (*pfn)(), const char*pname) {
+int add_pfn(int prot, void (*pfn)(), const char*pname, int act) {
 	gpfn_t *g = (gpfn_t *)malloc(sizeof(gpfn_t));
 	if( !g ) return -1;
 
 	g->no = __stp.pfns;
 	g->prot = prot;
 	g->pfn = pfn;
-	g->status = 0;
+	g->status = (act == 1)? 0 : 2;
 	if( prot > 0) {
 		set_timed(&g->tmd,prot);
 	}

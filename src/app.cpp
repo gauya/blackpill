@@ -38,16 +38,35 @@ int dma_completed;
 extern int aflag[3] ;
 
 void adc_cb() {
-  dma_completed = 1;
+  dma_completed++;
 }
 
-void testadc() {
-  uint16_t val[8] = { 0,0,0,0,0,0,0,0 };
+#define VREFINT 1.21
+#define REFVOL 3.3  // typical voltage
+#define ADCMAX 4095.0
+#define V25 0.76        // Voltage at 25C
+#define AVG_SLOPE 0.0025 // 2.5mV/C
 
-  if(dma_completed == 1) {
-    adc.read(val,4);
+void testadc() {
+  uint16_t val[18] = {0,};
+
+  if(dma_completed > 0) {
+    adc.read(val,12);
+    //gdebug(2,"adc %8d %5d %5d %5d %5d %5d %5d %5d %5d\n", dma_completed, val[0], val[1], val[2], val[3], val[4], val[5], val[6], val[7]);
+    gdebug(2,"adc %8d", dma_completed);
+    for( int i=0; i < 12; i++ ) {
+      gdebug(2,"%6d", val[i]);
+
+    }
+    gdebug(2,"\n");
+
+    double VrefInt = (VREFINT * ADCMAX) / val[5];
+    //double Vtmpsens = (VREFINT * val[5]) / ADCMAX;
+    double Vtmpsens = REFVOL * (((double)val[4]) / ADCMAX);
+    double Temperature = (Vtmpsens - V25) * 0.1 / AVG_SLOPE + 25.0; // 200/.76
+
+    gdebug(2,"Vref=%5.2fV %.2f Temp=%.2fC\n",VrefInt, Vtmpsens, Temperature);
     dma_completed = 0;
-    gdebug(2,"adc = %ld %ld %ld %ld %ld %ld %ld %ld\n",  val[0], val[1], val[2], val[3], val[4], val[5], val[6], val[7]);
   } else {
     gdebug(2,"adc not completed\n");
   }
@@ -203,6 +222,8 @@ void setup() {
   log_level = 2;
 
   adc_channels ac[] = {
+    { ADC_CHANNEL_0, ADC_SAMPLETIME_56CYCLES,GPIOA, 0,},
+    { ADC_CHANNEL_1, ADC_SAMPLETIME_56CYCLES,GPIOA, 1,},
     { ADC_CHANNEL_2, ADC_SAMPLETIME_56CYCLES,GPIOA, 2,},
     { ADC_CHANNEL_9, ADC_SAMPLETIME_56CYCLES,GPIOB, 1, },
   //  { ADC_CHANNEL_17, ADC_SAMPLETIME_480CYCLES,0, 0, },
@@ -210,7 +231,7 @@ void setup() {
     0
   };
 
-  adc.setup(ADC1,2,ac,0,0);
+  adc.setup(ADC1,4,ac,0,0);
   adc.attach(adc_cb);
   adc.start();
 
