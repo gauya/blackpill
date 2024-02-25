@@ -37,6 +37,10 @@ double topg( pg_t *p, double v ) {
 	return (v / ( p->max - p->min )); // -1 ~ 1
 }
 
+/// @brief 
+/// @param s 
+/// @param e 
+/// @return 
 uint32_t dif_u32(uint32_t s,uint32_t e) {
 	return (uint32_t)(s > e)? (uint32_t)(0xffffffff - s + e) : (e - s);
 }
@@ -45,6 +49,23 @@ uint32_t dif_u32_limit(uint32_t s,uint32_t e,uint32_t max) {
 	return (uint32_t)(s > e)? ((max-s) + e) : (e-s);
 }
 
+int bit_count(uint32_t word) {
+	int cnt = 0;
+	int i=32;
+
+	while( word && i-- > 0 ) { 
+		if( word & 1 ) cnt++;
+		word >>= 1;
+	}
+
+	return cnt;
+}
+
+
+/// @brief 
+/// @param k 
+/// @param nv 
+/// @return 
 double gavg( gavg_t* k, double nv )
 {
     k->v = ( (k->v*k->n) + nv ) / (k->n+1);
@@ -78,6 +99,11 @@ void gavg::set(uint32_t b) {
 	if( cb < n ) n = cb;
 }
 
+/// @brief 
+/// @tparam T 
+/// @tparam N 
+/// @param val 
+/// @return 
 template<typename T, typename N>
 T gtg<T,N>::put( T val ) {
     v = ( (v * n) + val) / (n + 1);
@@ -90,6 +116,9 @@ void gtg<T,N>::set( N b ) {
 	if( cb < n ) n = cb;
 }
 
+/// @brief 
+/// @param no 
+/// @param cs 
 gam::gam(int no=0, int *cs=0) {
 	if( no <= 0 ) {
 		return;

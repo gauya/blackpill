@@ -27,6 +27,47 @@
 extern "C" {
 #endif
 
+
+typedef union {
+	uint32_t wD;
+	struct {
+		uint32_t	BT0:1;
+		uint32_t	BT1:1;
+		uint32_t	BT2:1;
+		uint32_t	BT3:1;
+		uint32_t	BT4:1;
+		uint32_t	BT5:1;
+		uint32_t	BT6:1;
+		uint32_t	BT7:1;
+		uint32_t	BT8:1;
+		uint32_t	BT9:1;
+		uint32_t	BT10:1;
+		uint32_t	BT11:1;
+		uint32_t	BT12:1;
+		uint32_t	BT13:1;
+		uint32_t	BT14:1;
+		uint32_t	BT15:1;
+		uint32_t	BT16:1;
+		uint32_t	BT17:1;
+		uint32_t	BT18:1;
+		uint32_t	BT19:1;
+		uint32_t	BT20:1;
+		uint32_t	BT21:1;
+		uint32_t	BT22:1;
+		uint32_t	BT23:1;
+		uint32_t	BT24:1;
+		uint32_t	BT25:1;
+		uint32_t	BT26:1;
+		uint32_t	BT27:1;
+		uint32_t	BT28:1;
+		uint32_t	BT29:1;
+		uint32_t	BT30:1;
+		uint32_t	BT31:1;
+	};
+} w32BT_t;
+
+int bit_count(uint32_t word);
+
 // max > min
 typedef struct {
 	double	max; //

@@ -7,12 +7,16 @@
 #include <gtty.h>
 #include <stdio.h>
 #include "app_etc.h"
+#include <ggpio.h>
 
 const int ledPin = PC13;
+gwgpio gLED(GPIOC, (1<<13));
+
 void loop_led() {
   static int sw=0,cnt=0;
+  gLED.toggle();
 
-  digitalWrite(ledPin, sw);
+  //digitalWrite(ledPin, sw);
 
   gdebug(2,"[%d]\n",cnt++);
   sw = !sw;
@@ -220,6 +224,7 @@ void setup() {
   Serial.println("Hello");
   
   log_level = 2;
+  gLED.init();
 
   adc_channels ac[] = {
     { ADC_CHANNEL_0, ADC_SAMPLETIME_56CYCLES,GPIOA, 0,},
