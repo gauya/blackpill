@@ -7,6 +7,7 @@
 #include <gtty.h>
 #include <stdio.h>
 #include "app_etc.h"
+#include <giwdg.h>
 #include <ggpio.h>
 
 const int ledPin = PC13;
@@ -37,19 +38,22 @@ void test2() {
   gdebug(2,"test2 cnt = %d : elapsed %ld sec %d.%d.%d.%d]\n",c++, t,d, h,m,s);
 }
 
-stm32adcdma adc;
-int dma_completed;
-extern int aflag[3] ;
-
-void adc_cb() {
-  dma_completed++;
-}
+#define ADC_TEST  1
 
 #define VREFINT 1.21
 #define REFVOL 3.3  // typical voltage
 #define ADCMAX 4095.0
 #define V25 0.76        // Voltage at 25C
 #define AVG_SLOPE 0.0025 // 2.5mV/C
+
+#if (ADC_TEST==1) 
+
+stm32adcdma adc;
+int dma_completed;
+
+void adc_cb() {
+  dma_completed++;
+}
 
 void testadc() {
   uint16_t val[18] = {0,};
@@ -58,7 +62,7 @@ void testadc() {
     adc.read(val,12);
     //gdebug(2,"adc %8d %5d %5d %5d %5d %5d %5d %5d %5d\n", dma_completed, val[0], val[1], val[2], val[3], val[4], val[5], val[6], val[7]);
     gdebug(2,"adc %8d", dma_completed);
-    for( int i=0; i < 12; i++ ) {
+    for( int i=0; i < adc.channel_nr(); i++ ) {
       gdebug(2,"%6d", val[i]);
 
     }
@@ -75,6 +79,24 @@ void testadc() {
     gdebug(2,"adc not completed\n");
   }
 }
+#else
+
+stm32adc adc;
+//uint16_t val[6];
+void testadc() {
+  uint16_t val[6];
+  //for(int i=0;i<6;i++) val[i] = 0;
+
+  adc.read(val);
+
+  gdebug(2,"adc read(%d)   : ",adc.channel_nr());
+  for( int i=0; i < adc.channel_nr(); i++ ) {
+    gdebug(2,"%u ", (val[i] & 0xfff));
+  }
+  gdebug(2,"\n");
+}
+
+#endif
 
 void test4() {
   int val = Serial.read();
@@ -227,18 +249,22 @@ void setup() {
   gLED.init();
 
   adc_channels ac[] = {
+    { ADC_CHANNEL_9, ADC_SAMPLETIME_56CYCLES,GPIOB, 1, },
+    { ADC_CHANNEL_17, ADC_SAMPLETIME_56CYCLES,0, 0, },
     { ADC_CHANNEL_0, ADC_SAMPLETIME_56CYCLES,GPIOA, 0,},
     { ADC_CHANNEL_1, ADC_SAMPLETIME_56CYCLES,GPIOA, 1,},
     { ADC_CHANNEL_2, ADC_SAMPLETIME_56CYCLES,GPIOA, 2,},
-    { ADC_CHANNEL_9, ADC_SAMPLETIME_56CYCLES,GPIOB, 1, },
-  //  { ADC_CHANNEL_17, ADC_SAMPLETIME_480CYCLES,0, 0, },
-  //  { ADC_CHANNEL_18, ADC_SAMPLETIME_480CYCLES,0, 0, },
-    0
+    { ADC_CHANNEL_18, ADC_SAMPLETIME_56CYCLES,0, 0, },
+    { -1,0 }
   };
 
-  adc.setup(ADC1,4,ac,0,0);
+#if (ADC_TEST==1)  
+  adc.setup(ADC1,ac,0,0);
   adc.attach(adc_cb);
   adc.start();
+#else
+  adc.setup(ADC1,ac);
+#endif
 
   init_ticks(eTICK_VOL_100us);
   init_pfn();

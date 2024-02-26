@@ -6,6 +6,7 @@
  */
 
 #include <gtick.h>
+#include <giwdg.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -69,8 +70,11 @@ void delay_ms( uint32_t ms ) {
 	} else {
 		ms += cm;
 	}
-	while(get_mtime() < ms);
+	clear_iwdg();
 
+	while(get_mtime() < ms) {
+		clear_iwdg();
+	}
 #endif
 }
 
@@ -86,7 +90,7 @@ void delay_us( uint32_t us ) {
 	} else {
 		us += cu;
 	}
-	while(get_utime() < us);
+	while(get_utime() < us) clear_iwdg();
 #endif
 }
 #undef U32ALLSET

@@ -47,13 +47,20 @@ stm32adc::stm32adc() {
   _mode = eADC_POLLING; // 0       (_mode & 0x7)
 }
 
-stm32adc::stm32adc(ADC_TypeDef *adc, int chs, struct adc_channels *ac) {
-  _mode = eADC_POLLING;
+//#include <stm32f4xx_hal.h>
 
-  setup(adc, chs, ac);
+stm32adc::stm32adc(ADC_TypeDef *adc, struct adc_channels *ac) {
+  _ha.Instance = 0;
+  _channel_nr = 0;
+  _timeout = 1; // ms
+  _status = eADC_NOTSETUP; // -1
+  _mode = eADC_POLLING; // 0       (_mode & 0x7)
+
+//  setup(adc, ac);
 }
 
-void stm32adc::setup(ADC_TypeDef *adc, int chs, struct adc_channels *ac) {
+#include <glog.h>
+void stm32adc::setup(ADC_TypeDef *adc, struct adc_channels *ac) {
   __HAL_RCC_ADC1_CLK_ENABLE();
 
   _ha.Instance = adc;
@@ -61,6 +68,9 @@ void stm32adc::setup(ADC_TypeDef *adc, int chs, struct adc_channels *ac) {
   _timeout = 1; // ms
   _status = 0;
  
+  int chs = 0;
+  for(; (ac+chs)->ch != -1 ; chs++);
+  
   _ha.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV2;
   _ha.Init.Resolution = ADC_RESOLUTION_12B;
   _ha.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
@@ -90,10 +100,19 @@ void stm32adc::setup(ADC_TypeDef *adc, int chs, struct adc_channels *ac) {
     add_channel(ac+i);
   }
 
-  add_channel(ADC_CHANNEL_VREFINT,ADC_SAMPLETIME_480CYCLES); // ADC_CHANNEL_17
-  add_channel(ADC_CHANNEL_TEMPSENSOR,ADC_SAMPLETIME_480CYCLES); // ADC_CHANNEL_18
-
+#if 0
+  add_channel(ADC_CHANNEL_VREFINT,ADC_SAMPLETIME_84CYCLES); // ADC_CHANNEL_17
+  add_channel(ADC_CHANNEL_TEMPSENSOR,ADC_SAMPLETIME_84CYCLES); // ADC_CHANNEL_18
+#endif
+  //HAL_ADC_TempSensor_Enable();
   //HAL_ADC_TempSensorVrefintCmd(ENABLE);
+  //while(HAL_ADCEx_Calibration_Start(&_ha) != HAL_OK);
+  //HAL_ADC_SelfCalibration_Start();
+  //HAL_ADC_Calibration_Start();
+  
+  /* Set ADC number of conversion */
+  //hadc->Instance->SQR1 &= ~(ADC_SQR1_L);
+  //hadc->Instance->SQR1 |=  ADC_SQR1(hadc->Init.NbrOfConversion);
 
   _status = 0;
 }
@@ -104,7 +123,9 @@ int stm32adc::add_channel(uint32_t ch,uint32_t samplerate) {
   sConfig.SamplingTime = samplerate; // default ADC_SAMPLETIME_84CYCLES; 
   sConfig.Rank = ++_channel_nr; // 1 ~ ,  
 
-  if (HAL_ADC_ConfigChannel(&_ha, &sConfig) != HAL_OK) {}
+  if (HAL_ADC_ConfigChannel(&_ha, &sConfig) != HAL_OK) {
+    Error_Handler();
+  }
 
   return  _channel_nr; // rank is auto increase sequentially
 }
@@ -117,7 +138,9 @@ int stm32adc::add_channel(struct adc_channels *ac) {
   sConfig.Rank = ac->rank = _channel_nr; // 0~ order by
   sConfig.SamplingTime = ac->sampling; //ADC_SAMPLETIME_3CYCLES;
   
-  if (HAL_ADC_ConfigChannel(&_ha, &sConfig) != HAL_OK) {}
+  if (HAL_ADC_ConfigChannel(&_ha, &sConfig) != HAL_OK) {
+    Error_Handler();
+  }
 
   if( ac->port != 0 ) { // not Vrefint, temperture, ..
     if( IS_GPIO_ALL_INSTANCE(ac->port)) {
@@ -142,11 +165,12 @@ int stm32adc::add_channel(struct adc_channels *ac) {
   return ++_channel_nr;
 }
 
-void stm32adc::start(int timeout) {
+void stm32adc::start() {
   if( ! isready() ) return;
 
-  HAL_ADC_Start(&_ha);
-  HAL_ADC_PollForConversion(&_ha, timeout);
+  if(HAL_ADC_Start(&_ha) != HAL_OK) {
+    Error_Handler();
+  }
 }
 
 void stm32adc::stop() {
@@ -165,24 +189,47 @@ int stm32adc::read() {
   if( ! isready() ) { 
     return (-1);
   }
+  int timeout = 1;
 
   if( _mode == eADC_POLLING ) {
     start();
   }
   
+  if(HAL_ADC_PollForConversion(&_ha, timeout) != HAL_OK) {
+    Error_Handler();
+  }
   uint32_t val = HAL_ADC_GetValue(&_ha);  // get adc value
 
+/*
   if(val & 0xfffff000) {
     _status &= 1; // set error
   }
+*/
 
   if( _mode == eADC_POLLING ) {
     //stop();
   }
   
-  return (int)(val & 0xfffl);
+  return (int)(val & (uint32_t)0xfffl);
 }
 
+int stm32adc::read(uint16_t *buf) {
+  start();
+
+  int i = 0;
+  for(; i < _channel_nr; i++ ) {
+    if(HAL_ADC_PollForConversion(&_ha, 1) != HAL_OK) {
+      Error_Handler();
+    }
+    
+    uint32_t v = HAL_ADC_GetValue(&_ha);  // get adc value
+    buf[i] = (uint16_t)(v & 0x0fffU);
+  }
+
+  stop();
+
+  return i;
+}
 
 /// @brief ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -193,8 +240,8 @@ stm32adcint::stm32adcint()
   HAL_NVIC_EnableIRQ(ADC_IRQn);
 }
 
-stm32adcint::stm32adcint(ADC_TypeDef *adc, int chs, struct adc_channels *ac, void (*intrf)()) 
-: stm32adc(adc, chs, ac) {
+stm32adcint::stm32adcint(ADC_TypeDef *adc, struct adc_channels *ac, void (*intrf)()) 
+: stm32adc(adc, ac) {
   _mode = eADC_INTERRUPT;
   HAL_NVIC_SetPriority(ADC_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(ADC_IRQn);
@@ -204,8 +251,8 @@ stm32adcint::~stm32adcint() {
   detach();
 }
 
-void stm32adcint::setup(ADC_TypeDef *adc, int chs, struct adc_channels *ac, void (*intrf)()) {
-  stm32adc::setup(adc, chs, ac);
+void stm32adcint::setup(ADC_TypeDef *adc, struct adc_channels *ac, void (*intrf)()) {
+  stm32adc::setup(adc, ac);
   attach(intrf);
 
 }
@@ -241,14 +288,14 @@ stm32adcdma::stm32adcdma()
   _mode = eADC_DMAINTERRUPT;
 }
 
-stm32adcdma::stm32adcdma(ADC_TypeDef *adc, int chs, struct adc_channels *ac, void (*intrf)(), uint16_t *dmabuf) 
-: stm32adcint(adc, chs, ac, intrf) {
+stm32adcdma::stm32adcdma(ADC_TypeDef *adc, struct adc_channels *ac, void (*intrf)(), uint16_t *dmabuf) 
+: stm32adcint(adc, ac, intrf) {
   _mode = eADC_DMAINTERRUPT;
   _dmabuf = dmabuf;
 }
 
  DMA_HandleTypeDef hdma_adc1;
-void stm32adcdma::setup(ADC_TypeDef *adc, int chs, struct adc_channels *ac, void (*intrf)(), uint16_t *dmabuf) {
+void stm32adcdma::setup(ADC_TypeDef *adc, struct adc_channels *ac, void (*intrf)(), uint16_t *dmabuf) {
   if( !dmabuf ) {
     _dmabuf = dmabuf = new uint16_t[channel_nr()*8];
   }
@@ -275,7 +322,7 @@ void stm32adcdma::setup(ADC_TypeDef *adc, int chs, struct adc_channels *ac, void
 
   hdma_adcp = &hdma_adc1;
 
-  stm32adcint::setup(adc, chs, ac, intrf);
+  stm32adcint::setup(adc, ac, intrf);
 
   __HAL_LINKDMA((&_ha),DMA_Handle,hdma_adc1);
 }

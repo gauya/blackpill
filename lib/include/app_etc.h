@@ -29,8 +29,7 @@ extern "C" {
 //void command_list(const char*str);
 //void scadule_traffic(const char*);
 void system_reset(const char *s);
-void init_iwdg();
-void clear_iwdg();
+
 
 #ifdef __cplusplus
 }
